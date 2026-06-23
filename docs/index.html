@@ -110,7 +110,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:9px 
 <div class="modal">
   <h2>🔒 관리자 확인</h2>
   <p id="pwDesc">변경사항을 제출하려면 비밀번호를 입력하세요.<br>
-  <small style="color:#555">처음 사용 시 입력한 값이 비밀번호로 설정됩니다.</small></p>
+  </p>
   <input type="password" id="pwInput" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doPw()">
   <div class="err" id="pwErr">비밀번호가 틀렸습니다.</div>
   <div class="row">
@@ -140,7 +140,6 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:9px 
   <input id="ghRepo" placeholder="예: ndhydra/makcha-balance" style="margin-top:6px">
   <label style="font-size:.82rem;color:var(--text2)">Personal Access Token (Issues 권한)</label>
   <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" style="margin-top:6px">
-  <div style="font-size:.72rem;color:var(--text2);margin-bottom:16px">GitHub → Settings → Developer settings → Fine-grained tokens → Issues 쓰기 권한</div>
   <div class="row">
     <button class="btn btn-p" onclick="saveGh()">저장</button>
     <button class="btn btn-g" onclick="document.getElementById('ghOverlay').style.display='none'">취소</button>
@@ -262,7 +261,7 @@ function doEnter(){
 // ─────────────────────────────────────────────
 function openPw(desc, cb){
   pwCb = cb;
-  document.getElementById('pwDesc').innerHTML = desc + '<br><small style="color:#555">처음 사용 시 입력한 값이 비밀번호로 설정됩니다.</small>';
+  document.getElementById('pwDesc').textContent = desc;
   document.getElementById('pwInput').value = '';
   document.getElementById('pwErr').style.display = 'none';
   document.getElementById('pwOverlay').style.display = 'flex';
@@ -583,7 +582,7 @@ function loop(ts){
 
 function physTick(dt){
   if(S.stunTimer>0){ S.stunTimer-=dt; return; }
-  S.vy+=cfg.gravity*SC*dt;
+  S.vy-=cfg.gravity*SC*dt;
   S.y+=S.vy*dt;
   if(S.y>=GND){S.y=GND;S.vy=0;S.grounded=true;S.jumps=0;}
   else S.grounded=false;
@@ -618,7 +617,7 @@ function drawJump(dt){
     ctx.beginPath(); ctx.moveTo(90,GND);
     for(let t=0;t<1.2;t+=.04){
       const px=90+t*cfg.baseSpeed*SC*.45;
-      const py=GND+(-cfg.jumpVelocity*SC*t+.5*cfg.gravity*SC*t*t);
+      const py=GND+(-cfg.jumpVelocity*SC*t-.5*cfg.gravity*SC*t*t);
       if(py>GND) break; ctx.lineTo(px,py);
     }
     ctx.stroke(); ctx.setLineDash([]);
