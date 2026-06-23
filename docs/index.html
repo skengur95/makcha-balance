@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>막차로 돌진! 밸런스 툴</title>
+<style>
+:root {
+  --bg:#0f0f1a; --surface:#1a1a2e; --surface2:#16213e;
+  --accent:#e94560; --accent2:#0f3460;
+  --text:#eaeaea; --text2:#8888a0; --border:#252540;
+  --green:#4ade80; --yellow:#facc15; --blue:#60a5fa; --purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+/* ── Modals ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:900}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px;width:min(440px,92vw);box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal h2{font-size:1.25rem;color:var(--yellow);margin-bottom:8px}
+.modal p{color:var(--text2);font-size:.875rem;line-height:1.65;margin-bottom:20px}
+.modal input{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:1rem;outline:none;margin-bottom:14px;transition:border .15s}
+.modal input:focus{border-color:var(--yellow)}
+.err{color:var(--accent);font-size:.8rem;margin-bottom:12px;display:none}
+
+/* ── Buttons ── */
+.btn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-size:.875rem;font-weight:600;transition:all .15s;white-space:nowrap}
+.btn-p{background:var(--accent);color:#fff} .btn-p:hover{background:#c7304e}
+.btn-s{background:var(--accent2);color:var(--blue)} .btn-s:hover{filter:brightness(1.2)}
+.btn-g{background:transparent;color:var(--text2);border:1px solid var(--border)} .btn-g:hover{color:var(--text);border-color:var(--text2)}
+.btn:disabled{opacity:.35;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── Layout ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 18px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+header h1{font-size:1.05rem;color:var(--yellow)}
+#badge{background:var(--accent2);color:var(--blue);padding:3px 11px;border-radius:20px;font-size:.78rem}
+.hdr-r{margin-left:auto;display:flex;gap:8px}
+
+.tabs{background:var(--surface2);border-bottom:1px solid var(--border);display:flex;padding:6px 12px 0;gap:2px;flex-shrink:0;overflow-x:auto}
+.tab{padding:8px 15px;border-radius:8px 8px 0 0;border:1px solid transparent;border-bottom:none;color:var(--text2);cursor:pointer;font-size:.82rem;white-space:nowrap;background:transparent;transition:all .15s}
+.tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.tab.on{color:var(--yellow);background:var(--bg);border-color:var(--border)}
+
+.content{flex:1;display:flex;overflow:hidden}
+
+/* ── Sim panel ── */
+.sim{width:42%;min-width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg);flex-shrink:0}
+.sim-hdr{padding:9px 14px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between}
+.sim-hdr h3{font-size:.85rem;color:var(--text2)}
+.sim-hint{font-size:.72rem;color:var(--text2)}
+.canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:14px}
+canvas{border-radius:8px;max-width:100%;cursor:pointer}
+.sim-btns{padding:9px 14px;border-top:1px solid var(--border);background:var(--surface);display:flex;gap:8px;flex-wrap:wrap}
+.sim-info{padding:9px 14px;border-top:1px solid var(--border);background:var(--surface2);font-size:.78rem;color:var(--text2);line-height:1.9;min-height:46px}
+.sim-info span{color:var(--green);font-weight:600}
+
+/* ── Controls panel ── */
+.ctrl{flex:1;overflow-y:auto;padding:14px}
+.group{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px}
+.group h4{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px}
+.srow{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.slbl{font-size:.83rem;flex:0 0 165px;color:var(--text)}
+.swrap{flex:1}
+input[type=range]{width:100%;appearance:none;height:4px;background:var(--border);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;transition:background .15s}
+input[type=range].mod::-webkit-slider-thumb{background:var(--yellow)}
+.sval{font-size:.83rem;font-weight:700;color:var(--yellow);flex:0 0 52px;text-align:right;font-family:monospace}
+.calc{background:var(--bg);border-radius:6px;padding:8px 12px;font-size:.78rem;color:var(--text2);margin-top:8px;line-height:1.9}
+.calc b{color:var(--green)}
+.stagegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stg-item label{display:block;font-size:.72rem;color:var(--text2);margin-bottom:4px;text-align:center}
+.stg-item input[type=number]{width:100%;padding:6px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--yellow);font-size:.9rem;font-weight:700;outline:none}
+
+/* ── Footer ── */
+footer{background:var(--surface);border-top:1px solid var(--border);padding:9px 18px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+#chgCount{font-size:.8rem;color:var(--text2)}
+#chgCount b{color:var(--yellow)}
+.ftr-r{margin-left:auto;display:flex;gap:10px}
+
+/* ── Queue items ── */
+.qi{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px}
+.qi h4{font-size:.88rem;margin-bottom:3px}
+.qi .meta{font-size:.72rem;color:var(--text2);margin-bottom:8px}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:72px;right:18px;background:var(--surface);border:1px solid var(--green);border-radius:8px;padding:11px 20px;box-shadow:0 8px 30px rgba(0,0,0,.5);z-index:999;font-size:.88rem;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--bg)} ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- Entry -->
+<div class="overlay" id="entryOverlay">
+<div class="modal">
+  <h2>🚆 막차로 돌진! 밸런스 툴</h2>
+  <p>조회는 가능하나 수정은 비밀번호가 필요합니다.<br>
+  <strong>성함이나 단체, 닉네임을 적어주세요.</strong><br>
+  <small style="color:#555">(아무거나 입력해도 들어가집니다)</small></p>
+  <input id="nameInput" placeholder="예: 홍길동 / 디자이너팀 / 테스터123" maxlength="30" autocomplete="off">
+  <button class="btn btn-p" style="width:100%" onclick="doEnter()">입장하기 →</button>
+</div>
+</div>
+
+<!-- Password -->
+<div class="overlay" id="pwOverlay" style="display:none">
+<div class="modal">
+  <h2>🔒 관리자 확인</h2>
+  <p id="pwDesc">변경사항을 제출하려면 비밀번호를 입력하세요.<br>
+  <small style="color:#555">처음 사용 시 입력한 값이 비밀번호로 설정됩니다.</small></p>
+  <input type="password" id="pwInput" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doPw()">
+  <div class="err" id="pwErr">비밀번호가 틀렸습니다.</div>
+  <div class="row">
+    <button class="btn btn-p" onclick="doPw()">확인</button>
+    <button class="btn btn-g" onclick="closePw()">취소</button>
+  </div>
+</div>
+</div>
+
+<!-- Queue -->
+<div class="overlay" id="qOverlay" style="display:none">
+<div class="modal" style="max-width:680px;max-height:82vh;overflow-y:auto">
+  <h2 style="margin-bottom:14px">📋 대기 중인 변경 요청</h2>
+  <div id="qList"><div style="color:var(--text2);text-align:center;padding:20px">불러오는 중...</div></div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn btn-s" onclick="fetchQueue()">새로고침</button>
+    <button class="btn btn-g" onclick="closeQ()">닫기</button>
+  </div>
+</div>
+</div>
+
+<!-- GitHub Settings -->
+<div class="overlay" id="ghOverlay" style="display:none">
+<div class="modal">
+  <h2 style="margin-bottom:14px">⚙️ GitHub 연동 설정</h2>
+  <label style="font-size:.82rem;color:var(--text2)">저장소 (owner/repo)</label>
+  <input id="ghRepo" placeholder="예: ndhydra/makcha-balance" style="margin-top:6px">
+  <label style="font-size:.82rem;color:var(--text2)">Personal Access Token (Issues 권한)</label>
+  <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" style="margin-top:6px">
+  <div style="font-size:.72rem;color:var(--text2);margin-bottom:16px">GitHub → Settings → Developer settings → Fine-grained tokens → Issues 쓰기 권한</div>
+  <div class="row">
+    <button class="btn btn-p" onclick="saveGh()">저장</button>
+    <button class="btn btn-g" onclick="document.getElementById('ghOverlay').style.display='none'">취소</button>
+  </div>
+</div>
+</div>
+
+<!-- Export JSON -->
+<div class="overlay" id="exportOverlay" style="display:none">
+<div class="modal" style="max-width:640px">
+  <h2 style="margin-bottom:12px">📋 변경 내용 (Unity에 붙여넣기)</h2>
+  <textarea id="exportText" readonly style="width:100%;height:280px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--green);font-family:monospace;font-size:.72rem;padding:12px;resize:none"></textarea>
+  <div class="row" style="margin-top:12px">
+    <button class="btn btn-p" onclick="copyExport()">복사</button>
+    <button class="btn btn-g" onclick="document.getElementById('exportOverlay').style.display='none'">닫기</button>
+  </div>
+</div>
+</div>
+
+<!-- App -->
+<div id="app" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+
+<header>
+  <h1>🚆 막차로 돌진! 밸런스 툴</h1>
+  <span id="badge">방문자</span>
+  <div class="hdr-r">
+    <button class="btn btn-g" style="font-size:.78rem" onclick="openQ()">📋 대기열</button>
+    <button class="btn btn-g" style="font-size:.78rem" onclick="openGh()">⚙️ GitHub</button>
+  </div>
+</header>
+
+<div class="tabs" id="tabBar"></div>
+
+<div class="content">
+  <div class="sim">
+    <div class="sim-hdr">
+      <h3 id="simTitle">미리보기</h3>
+      <span class="sim-hint" id="simHint"></span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="c" width="400" height="250"></canvas>
+    </div>
+    <div class="sim-btns" id="simBtns"></div>
+    <div class="sim-info" id="simInfo"></div>
+  </div>
+  <div class="ctrl" id="ctrlPanel"></div>
+</div>
+
+<footer>
+  <div id="chgCount">변경된 항목: <b>0</b>개</div>
+  <div class="ftr-r">
+    <button class="btn btn-g" onclick="resetAll()">초기화</button>
+    <button class="btn btn-p" onclick="submitChanges()">최종 적용 요청 →</button>
+  </div>
+</footer>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// DEFAULTS (mirrors GameBalance.cs)
+// ─────────────────────────────────────────────
+const DEF = {
+  gravity:-22, jumpVelocity:11, doubleJumpMult:0.75,
+  baseSpeed:5, stageTargetDistance:300,
+  stageTimers:[50,40,30,30,30,30],
+  stunBaseDuration:1.5, stunMinDuration:0.5,
+  drunkUncleCost:190, earlyLeaveCost:190, overtimeCost:240,
+  drunkUncleStunReduce:1, earlyLeaveSpeedBonus:1, overtimeMaxJumps:3,
+  timeBonusPerLv:1, stunReducePerLv:0.1, speedBonusPerLv:0.5,
+  timeCost:3, maxTimeLv:10, stunCost:3, maxStunLv:5, speedCost:5, maxSpeedLv:6,
+  xpBase:80, xpPerLevel:20,
+  obsInitialDelay:1.5, obsBaseInterval:2.2, obsIntervalReduce:0.4,
+  obsMinInterval:0.65, obsIntervalRandom:0.15,
+  jellyInitialDelay:1, jellyBaseInterval:0.8,
+  jellyIntervalRandom:0.6, jellySpawnChance:0.5, jellyScore:10,
+  coinInitialDelay:4, coinMinInterval:4, coinMaxInterval:9,
+  defaultStartCoins:50, nicknameChangeCost:200
+};
+
+let cfg = deep(DEF), mod = {}, visitor = '', pwCb = null;
+
+function deep(o){ return JSON.parse(JSON.stringify(o)); }
+function fmt(v){ return Number.isInteger(v) ? v : parseFloat(v.toFixed(3)); }
+
+// ─────────────────────────────────────────────
+// CRYPTO
+// ─────────────────────────────────────────────
+async function sha256(s){
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function checkPw(pw){
+  const stored = localStorage.getItem('mk_pw');
+  if(!stored){ localStorage.setItem('mk_pw', await sha256(pw)); return true; }
+  return (await sha256(pw)) === stored;
+}
+
+// ─────────────────────────────────────────────
+// ENTRY
+// ─────────────────────────────────────────────
+document.getElementById('nameInput').onkeydown = e => { if(e.key==='Enter') doEnter(); };
+function doEnter(){
+  const v = document.getElementById('nameInput').value.trim();
+  if(!v){ document.getElementById('nameInput').style.borderColor='var(--accent)'; return; }
+  visitor = v;
+  document.getElementById('entryOverlay').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'flex';
+  document.getElementById('badge').textContent = '👤 '+visitor;
+  // load GitHub settings
+  document.getElementById('ghRepo').value = localStorage.getItem('mk_repo')||'';
+  document.getElementById('ghToken').value = localStorage.getItem('mk_tok')||'';
+  initTabs();
+  requestAnimationFrame(loop);
+}
+
+// ─────────────────────────────────────────────
+// PASSWORD MODAL
+// ─────────────────────────────────────────────
+function openPw(desc, cb){
+  pwCb = cb;
+  document.getElementById('pwDesc').innerHTML = desc + '<br><small style="color:#555">처음 사용 시 입력한 값이 비밀번호로 설정됩니다.</small>';
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwErr').style.display = 'none';
+  document.getElementById('pwOverlay').style.display = 'flex';
+  setTimeout(()=>document.getElementById('pwInput').focus(),80);
+}
+function closePw(){ document.getElementById('pwOverlay').style.display='none'; pwCb=null; }
+async function doPw(){
+  const v = document.getElementById('pwInput').value;
+  if(!v) return;
+  const ok = await checkPw(v);
+  if(ok){ closePw(); pwCb?.(); }
+  else { document.getElementById('pwErr').style.display='block'; document.getElementById('pwInput').value=''; document.getElementById('pwInput').focus(); }
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+const TABS = [
+  {id:'physics', icon:'🏃', label:'물리', sim:'jump'},
+  {id:'speed',   icon:'🚀', label:'속도·스테이지', sim:'runner'},
+  {id:'stun',    icon:'💥', label:'스턴', sim:'stun'},
+  {id:'chars',   icon:'👔', label:'캐릭터', sim:'chars'},
+  {id:'ability', icon:'⬆',  label:'능력치', sim:'abil'},
+  {id:'xp',      icon:'⭐', label:'경험치', sim:'xp'},
+  {id:'spawn',   icon:'🧱', label:'스포너', sim:'spawn'},
+  {id:'eco',     icon:'💰', label:'경제', sim:'eco'},
+];
+let curTab = 0;
+
+function initTabs(){
+  const bar = document.getElementById('tabBar');
+  TABS.forEach((t,i)=>{
+    const b = document.createElement('button');
+    b.className='tab'+(i===0?' on':'');
+    b.textContent=t.icon+' '+t.label;
+    b.onclick=()=>switchTab(i);
+    bar.appendChild(b);
+  });
+  switchTab(0);
+}
+function switchTab(i){
+  curTab=i;
+  document.querySelectorAll('.tab').forEach((b,j)=>b.classList.toggle('on',j===i));
+  buildCtrl(i);
+  resetSim(TABS[i].sim);
+}
+
+// ─────────────────────────────────────────────
+// CONTROLS BUILDER HELPERS
+// ─────────────────────────────────────────────
+function mkGroup(title){
+  const g=document.createElement('div'); g.className='group';
+  const h=document.createElement('h4'); h.textContent=title; g.appendChild(h);
+  return g;
+}
+function mkCalc(html){
+  const d=document.createElement('div'); d.className='calc'; d.innerHTML=html; return d;
+}
+function mkSlider(lbl,key,mn,mx,step,isInt){
+  const row=document.createElement('div'); row.className='srow';
+  const l=document.createElement('span'); l.className='slbl'; l.textContent=lbl;
+  const w=document.createElement('div'); w.className='swrap';
+  const inp=document.createElement('input'); inp.type='range';
+  inp.min=mn; inp.max=mx; inp.step=step; inp.value=cfg[key];
+  if(mod[key]!==undefined) inp.classList.add('mod');
+  const vl=document.createElement('span'); vl.className='sval';
+  vl.textContent=isInt?Math.round(cfg[key]):fmt(cfg[key]);
+  inp.oninput=()=>{
+    const v=isInt?parseInt(inp.value):parseFloat(inp.value);
+    cfg[key]=v; mod[key]=v;
+    vl.textContent=isInt?v:fmt(v);
+    inp.classList.add('mod');
+    updateCount(); onCfgChange();
+  };
+  w.appendChild(inp); row.appendChild(l); row.appendChild(w); row.appendChild(vl);
+  return row;
+}
+function mkISlider(lbl,key,mn,mx){ return mkSlider(lbl,key,mn,mx,1,true); }
+
+function updateCount(){
+  const n=Object.keys(mod).length+(mod.stageTimers?1:0);
+  document.getElementById('chgCount').innerHTML=`변경된 항목: <b>${Object.keys(mod).length}</b>개`;
+}
+
+// ─────────────────────────────────────────────
+// CONTROLS PER TAB
+// ─────────────────────────────────────────────
+function buildCtrl(i){
+  const p=document.getElementById('ctrlPanel'); p.innerHTML='';
+  [buildPhysics,buildSpeed,buildStun,buildChars,buildAbility,buildXp,buildSpawn,buildEco][i](p);
+}
+
+function buildPhysics(p){
+  const g2=mkGroup('플레이어 물리');
+  g2.appendChild(mkSlider('중력 (gravity)','gravity',-40,-5,.5));
+  g2.appendChild(mkSlider('점프 초속 (jumpVy)','jumpVelocity',5,20,.5));
+  g2.appendChild(mkSlider('2단점프 배율','doubleJumpMult',.3,1,.05));
+  const calc=mkCalc('');
+  const upd=()=>{
+    const t=((-2*cfg.jumpVelocity)/cfg.gravity).toFixed(2);
+    const h=(-(cfg.jumpVelocity**2)/(2*cfg.gravity)).toFixed(2);
+    calc.innerHTML=`체공시간: <b>${t}초</b> &nbsp;|&nbsp; 최고높이: <b>${h}유닛</b> &nbsp;|&nbsp; 2단점프: <b>${fmt(cfg.jumpVelocity*cfg.doubleJumpMult)}</b>`;
+  };
+  upd(); g2.appendChild(calc); p.appendChild(g2);
+  window._physUpd=upd;
+  const hint=document.createElement('div');
+  hint.style.cssText='font-size:.78rem;color:var(--text2);padding:6px 2px';
+  hint.textContent='← 캔버스 클릭 또는 스페이스로 점프 테스트';
+  p.appendChild(hint);
+}
+
+function buildSpeed(p){
+  const g1=mkGroup('이동 속도');
+  g1.appendChild(mkSlider('기본 속도','baseSpeed',2,15,.5));
+  g1.appendChild(mkSlider('칼퇴 속도 보너스','earlyLeaveSpeedBonus',0,5,.25));
+  g1.appendChild(mkSlider('속도능력 보너스/레벨','speedBonusPerLv',.1,2,.1));
+  p.appendChild(g1);
+
+  const g2=mkGroup('스테이지 제한시간 (초)');
+  const grid=document.createElement('div'); grid.className='stagegrid';
+  cfg.stageTimers.forEach((t,i)=>{
+    const it=document.createElement('div'); it.className='stg-item';
+    const lbl=document.createElement('label'); lbl.textContent=`스테이지 ${i+1}`;
+    const inp=document.createElement('input'); inp.type='number';
+    inp.min=10; inp.max=120; inp.value=t;
+    inp.onchange=()=>{
+      cfg.stageTimers[i]=parseFloat(inp.value)||t;
+      if(!mod.stageTimers) mod.stageTimers=[...cfg.stageTimers];
+      mod.stageTimers[i]=cfg.stageTimers[i];
+      updateCount();
+    };
+    it.appendChild(lbl); it.appendChild(inp); grid.appendChild(it);
+  });
+  g2.appendChild(grid); p.appendChild(g2);
+}
+
+function buildStun(p){
+  const g=mkGroup('스턴 설정');
+  g.appendChild(mkSlider('기본 스턴 시간','stunBaseDuration',.5,5,.1));
+  g.appendChild(mkSlider('최소 스턴 시간','stunMinDuration',.1,2,.1));
+  g.appendChild(mkSlider('술취한아저씨 감소','drunkUncleStunReduce',0,2,.1));
+  g.appendChild(mkSlider('스턴능력 감소/레벨','stunReducePerLv',.05,.5,.05));
+  const calc=mkCalc('');
+  const upd=()=>{
+    const base=cfg.stunBaseDuration;
+    const drunk=Math.max(cfg.stunMinDuration,base-cfg.drunkUncleStunReduce);
+    const maxRed=cfg.stunReducePerLv*cfg.maxStunLv;
+    const fin=Math.max(cfg.stunMinDuration,base-maxRed);
+    calc.innerHTML=`기본: <b>${base.toFixed(1)}s</b> | 술취한아저씨: <b>${drunk.toFixed(1)}s</b> | 풀업 후: <b>${fin.toFixed(1)}s</b>`;
+  };
+  upd(); g.appendChild(calc); p.appendChild(g);
+  window._stunUpd=upd;
+}
+
+function buildChars(p){
+  [{name:'기본 회사원',c:'#3340a0',desc:'기본 캐릭터 (무료)',key:null},
+   {name:'술취한 아저씨',c:'#801828',desc:'스턴 시간 감소',key:'drunkUncleCost'},
+   {name:'칼퇴 아저씨',c:'#246ac0',desc:'이동 속도 증가',key:'earlyLeaveCost'},
+   {name:'야근한 아저씨',c:'#4d2473',desc:'추가 점프 가능',key:'overtimeCost'},
+  ].forEach(ch=>{
+    const g=mkGroup(ch.name); g.style.borderLeft=`3px solid ${ch.c}`;
+    if(ch.key) g.appendChild(mkISlider('구입 비용 (코인)',ch.key,50,500));
+    else{ const d=document.createElement('div'); d.style.cssText='font-size:.82rem;color:var(--text2);padding:4px 0'; d.textContent='무료'; g.appendChild(d); }
+    const d2=document.createElement('div'); d2.style.cssText='font-size:.78rem;color:var(--text2);margin-top:6px';
+    d2.textContent='특성: '+ch.desc; g.appendChild(d2); p.appendChild(g);
+  });
+  const g2=mkGroup('야근한 아저씨 점프');
+  g2.appendChild(mkISlider('최대 점프 횟수','overtimeMaxJumps',2,5));
+  p.appendChild(g2);
+}
+
+function buildAbility(p){
+  [{n:'⏱ 막차 시간 연장',ck:'timeCost',mk:'maxTimeLv',bk:'timeBonusPerLv',u:'초'},
+   {n:'💥 스턴 감소',ck:'stunCost',mk:'maxStunLv',bk:'stunReducePerLv',u:'초'},
+   {n:'🚀 속도 증가',ck:'speedCost',mk:'maxSpeedLv',bk:'speedBonusPerLv',u:''},
+  ].forEach(a=>{
+    const g=mkGroup(a.n);
+    g.appendChild(mkISlider('업그레이드 비용 (포인트)',a.ck,1,20));
+    g.appendChild(mkISlider('최대 레벨',a.mk,1,20));
+    g.appendChild(mkSlider('레벨당 보너스',a.bk,.05,3,.05));
+    const calc=mkCalc('');
+    const upd=()=>{ calc.innerHTML=`최대 보너스: <b>${fmt(cfg[a.mk]*cfg[a.bk])}${a.u}</b> | 총 비용: <b>${cfg[a.ck]*cfg[a.mk]}포인트</b>`; };
+    upd(); g.appendChild(calc); p.appendChild(g);
+  });
+}
+
+function buildXp(p){
+  const g=mkGroup('경험치 공식  (XP = xpBase + Level × xpPerLevel)');
+  g.appendChild(mkISlider('XP 기초값','xpBase',20,300));
+  g.appendChild(mkISlider('레벨당 증가','xpPerLevel',5,100));
+  const calc=mkCalc('');
+  const upd=()=>{
+    const rows=[1,5,10,20,50].map(lv=>`Lv${lv}: <b>${cfg.xpBase+lv*cfg.xpPerLevel}</b>`);
+    calc.innerHTML=rows.join(' &nbsp;|&nbsp; ');
+  };
+  upd(); g.appendChild(calc); p.appendChild(g);
+  window._xpUpd=upd;
+}
+
+function buildSpawn(p){
+  const g1=mkGroup('장애물 (Obstacle)');
+  g1.appendChild(mkSlider('초기 딜레이','obsInitialDelay',.5,5,.25));
+  g1.appendChild(mkSlider('기본 생성 간격','obsBaseInterval',.5,5,.1));
+  g1.appendChild(mkSlider('스테이지당 간격감소','obsIntervalReduce',0,1,.05));
+  g1.appendChild(mkSlider('최소 간격','obsMinInterval',.2,2,.05));
+  g1.appendChild(mkSlider('랜덤 편차 ±','obsIntervalRandom',0,.5,.05));
+  p.appendChild(g1);
+
+  const g2=mkGroup('젤리 (Jelly)');
+  g2.appendChild(mkSlider('초기 딜레이','jellyInitialDelay',.5,5,.25));
+  g2.appendChild(mkSlider('생성 간격','jellyBaseInterval',.2,3,.1));
+  g2.appendChild(mkSlider('생성 확률','jellySpawnChance',0,1,.05));
+  g2.appendChild(mkSlider('점수','jellyScore',5,50,5));
+  p.appendChild(g2);
+
+  const g3=mkGroup('코인 (Coin)');
+  g3.appendChild(mkSlider('최소 생성 간격','coinMinInterval',1,15,.5));
+  g3.appendChild(mkSlider('최대 생성 간격','coinMaxInterval',2,25,.5));
+  p.appendChild(g3);
+}
+
+function buildEco(p){
+  const g=mkGroup('경제');
+  g.appendChild(mkISlider('시작 코인','defaultStartCoins',0,300));
+  g.appendChild(mkISlider('닉네임 변경 비용','nicknameChangeCost',50,1000));
+  p.appendChild(g);
+}
+
+function onCfgChange(){
+  window._physUpd?.();
+  window._stunUpd?.();
+  window._xpUpd?.();
+}
+
+// ─────────────────────────────────────────────
+// SIMULATION
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const GND = 210, SC = 22; // ground y (px), scale px/unit
+let simType='jump', S={}, lastT=0;
+
+function resetSim(type){
+  simType=type; S={};
+  document.getElementById('simBtns').innerHTML='';
+  document.getElementById('simInfo').textContent='';
+  window._physUpd=window._stunUpd=window._xpUpd=undefined;
+
+  const title={jump:'🏃 점프 시뮬레이션',runner:'🚀 러너 미리보기',stun:'💥 스턴 시뮬레이션',
+    chars:'👔 캐릭터 비교',abil:'⬆ 능력치 차트',xp:'⭐ 경험치 곡선',spawn:'🧱 스폰 패턴',eco:'💰 경제 요약'};
+  const hint={jump:'클릭 / 스페이스 → 점프',runner:'캔버스 클릭 → 점프',stun:'버튼으로 스턴 체험',
+    chars:'캐릭터 능력 시각화',abil:'능력치 레벨별 효과',xp:'레벨별 필요 XP',spawn:'생성 주기 타임라인',eco:'코인 흐름'};
+  document.getElementById('simTitle').textContent=title[type]||'미리보기';
+  document.getElementById('simHint').textContent=hint[type]||'';
+
+  if(type==='jump'||type==='runner'||type==='stun'){
+    S={y:GND,vy:0,grounded:true,jumps:0,stunTimer:0,t:0,
+       obs:[],obsT:1.5,coinT:4,paused:false,stageT:cfg.stageTimers[0]};
+    if(type==='stun'){
+      addSimBtn('💥 스턴 발동!',()=>{S.stunTimer=cfg.stunBaseDuration;});
+    }
+    if(type==='runner'){
+      addSimBtn('▶ 시작/정지',()=>{S.paused=!S.paused;});
+      const sel=document.createElement('select');
+      sel.style.cssText='background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 10px;font-size:.78rem';
+      for(let i=1;i<=6;i++){const o=document.createElement('option');o.value=i;o.textContent=`스테이지 ${i} (${cfg.stageTimers[i-1]}초)`;sel.appendChild(o);}
+      sel.onchange=()=>{S.stageT=cfg.stageTimers[parseInt(sel.value)-1];S.obs=[];S.obsT=2;};
+      document.getElementById('simBtns').appendChild(sel);
+    }
+    if(type==='jump') addSimBtn('↑ 점프',doJump);
+  }
+  if(type==='spawn'){
+    S={time:0,evs:[],obsT:cfg.obsInitialDelay,jellyT:cfg.jellyInitialDelay,coinT:cfg.coinInitialDelay};
+    addSimBtn('↺ 리셋',()=>{S={time:0,evs:[],obsT:cfg.obsInitialDelay,jellyT:cfg.jellyInitialDelay,coinT:cfg.coinInitialDelay};});
+  }
+}
+function addSimBtn(lbl,fn){
+  const b=document.createElement('button');
+  b.className='btn btn-s'; b.style.fontSize='.78rem'; b.textContent=lbl; b.onclick=fn;
+  document.getElementById('simBtns').appendChild(b);
+}
+
+// Input
+document.addEventListener('keydown',e=>{
+  if(document.getElementById('pwOverlay').style.display!=='none') return;
+  if(document.getElementById('entryOverlay').style.display!=='none') return;
+  if(e.code==='Space'){e.preventDefault();doJump();}
+});
+canvas.onclick=()=>doJump();
+function doJump(){
+  if(simType==='runner'&&S.paused) return;
+  if(simType==='stun'&&S.stunTimer>0) return;
+  if((simType==='jump'||simType==='runner'||simType==='stun')){
+    const mx=cfg.overtimeMaxJumps;
+    if(S.jumps>=mx) return;
+    const mult=S.jumps===0?1:cfg.doubleJumpMult;
+    S.vy=-cfg.jumpVelocity*SC*mult;
+    S.jumps++;
+  }
+}
+
+// Main loop
+function loop(ts){
+  const dt=Math.min((ts-lastT)/1000,.05); lastT=ts;
+  ctx.fillStyle='#0f0f1a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  if(simType==='jump') drawJump(dt);
+  else if(simType==='runner') drawRunner(dt);
+  else if(simType==='stun') drawStun(dt);
+  else if(simType==='chars') drawChars();
+  else if(simType==='abil') drawAbil();
+  else if(simType==='xp') drawXp();
+  else if(simType==='spawn') drawSpawn(dt);
+  else if(simType==='eco') drawEco();
+
+  requestAnimationFrame(loop);
+}
+
+function physTick(dt){
+  if(S.stunTimer>0){ S.stunTimer-=dt; return; }
+  S.vy+=cfg.gravity*SC*dt;
+  S.y+=S.vy*dt;
+  if(S.y>=GND){S.y=GND;S.vy=0;S.grounded=true;S.jumps=0;}
+  else S.grounded=false;
+  S.t+=dt;
+}
+
+function drawPlayer(x,color='#3340a0',stun=false){
+  const vis=!stun||Math.sin(S.t*20)>0;
+  if(!vis) return;
+  ctx.fillStyle=stun?'#ff6040':color;
+  ctx.fillRect(x-11,S.y-34,22,24);
+  ctx.fillStyle='#f0c070';
+  ctx.fillRect(x-7,S.y-48,14,14);
+  const tc=stun?'#ff2000':color.replace('#',''); // darken
+  ctx.fillStyle='#1a1a60';
+  ctx.fillRect(x-9,S.y-12,7,13);
+  ctx.fillRect(x+2,S.y-12,7,13);
+}
+
+function drawGround(){
+  ctx.fillStyle='#1e3a1e'; ctx.fillRect(0,GND,canvas.width,canvas.height-GND);
+  ctx.strokeStyle='#4a8a4a'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,GND); ctx.lineTo(canvas.width,GND); ctx.stroke();
+}
+
+function drawJump(dt){
+  physTick(dt);
+  drawGround();
+  // jump arc preview
+  if(S.grounded&&S.jumps===0){
+    ctx.strokeStyle='rgba(250,204,21,.3)'; ctx.setLineDash([4,5]); ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(90,GND);
+    for(let t=0;t<1.2;t+=.04){
+      const px=90+t*cfg.baseSpeed*SC*.45;
+      const py=GND+(-cfg.jumpVelocity*SC*t+.5*cfg.gravity*SC*t*t);
+      if(py>GND) break; ctx.lineTo(px,py);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  drawPlayer(90,'#3340a0',S.stunTimer>0);
+  // info
+  const h=S.grounded?0:((GND-S.y)/SC).toFixed(2);
+  document.getElementById('simInfo').innerHTML=
+    `높이: <span>${h} 유닛</span> &nbsp;|&nbsp; 수직속도: <span>${(S.vy/SC).toFixed(2)}/s</span> &nbsp;|&nbsp; 점프: <span>${S.jumps}/${cfg.overtimeMaxJumps}</span>`;
+}
+
+function drawRunner(dt){
+  if(!S.paused){
+    const spd=cfg.baseSpeed*SC*.5;
+    S.obs=(S.obs||[]).map(o=>({...o,x:o.x-spd*dt})).filter(o=>o.x>-30);
+    S.obsT-=dt;
+    if(S.obsT<=0){
+      const h=[28,55][Math.floor(Math.random()*2)];
+      S.obs.push({x:canvas.width+10,h});
+      S.obsT=Math.max(cfg.obsMinInterval,cfg.obsBaseInterval)+(Math.random()-.5)*cfg.obsIntervalRandom*2;
+    }
+    S.stageT=Math.max(0,S.stageT-dt);
+    physTick(dt);
+  }
+  drawGround();
+  S.obs.forEach(o=>{
+    ctx.fillStyle='#7272a0';
+    ctx.fillRect(o.x-11,GND-o.h,22,o.h);
+  });
+  drawPlayer(80);
+  // timer bar
+  const max=cfg.stageTimers[0],ratio=S.stageT/max;
+  ctx.fillStyle='#1a1a3e'; ctx.fillRect(10,10,canvas.width-20,14);
+  ctx.fillStyle=ratio>.3?'#4ade80':'#ef4444';
+  ctx.fillRect(10,10,(canvas.width-20)*ratio,14);
+  ctx.fillStyle='white'; ctx.font='10px monospace'; ctx.textAlign='center';
+  ctx.fillText(`${S.stageT.toFixed(1)}s / ${max}s`,canvas.width/2,21);
+  document.getElementById('simInfo').innerHTML=
+    `속도: <span>${cfg.baseSpeed}</span> | 장애물 간격: <span>${fmt(cfg.obsBaseInterval)}s</span> | 남은 시간: <span style="color:${S.stageT<10?'var(--accent)':'var(--green)'}">${S.stageT.toFixed(0)}s</span>`;
+}
+
+function drawStun(dt){
+  if(S.stunTimer>0) S.stunTimer-=dt;
+  physTick(dt);
+  drawGround();
+  drawPlayer(180,'#3340a0',S.stunTimer>0);
+  if(S.stunTimer>0){
+    const r=S.stunTimer/cfg.stunBaseDuration;
+    ctx.fillStyle='#3a1a1a'; ctx.fillRect(120,GND-68,160,12);
+    ctx.fillStyle='#ef4444'; ctx.fillRect(120,GND-68,160*r,12);
+    ctx.fillStyle='white'; ctx.font='bold 10px monospace'; ctx.textAlign='center';
+    ctx.fillText(`${S.stunTimer.toFixed(2)}s`,200,GND-59);
+    for(let i=0;i<3;i++){
+      const a=Date.now()/280+i*Math.PI*2/3;
+      ctx.fillStyle='#facc15'; ctx.font='13px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('★',180+Math.cos(a)*22,GND-78+Math.sin(a)*7);
+    }
+  } else {
+    ctx.fillStyle='#4ade80'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('정상 상태',200,GND-16);
+  }
+  document.getElementById('simInfo').innerHTML=
+    S.stunTimer>0?`스턴 중: <span style="color:var(--accent)">${S.stunTimer.toFixed(2)}초 남음</span>`
+    :'스턴 없음 — 위 버튼 클릭으로 체험';
+}
+
+function drawChars(){
+  const chars=[
+    {n:'기본',c:'#3340a0',x:50},{n:'술취한',c:'#801828',x:150},
+    {n:'칼퇴',c:'#246ac0',x:250},{n:'야근',c:'#4d2473',x:350}
+  ];
+  drawGround();
+  chars.forEach(ch=>{
+    ctx.fillStyle=ch.c; ctx.fillRect(ch.x-11,GND-34,22,24);
+    ctx.fillStyle='#f0c070'; ctx.fillRect(ch.x-7,GND-48,14,14);
+    ctx.fillStyle='#1a1a60'; ctx.fillRect(ch.x-9,GND-12,7,13); ctx.fillRect(ch.x+2,GND-12,7,13);
+    ctx.fillStyle='#a0a0b0'; ctx.font='9px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(ch.n,ch.x,GND+14);
+  });
+  document.getElementById('simInfo').innerHTML=
+    `술취한: <span>스턴 -${cfg.drunkUncleStunReduce}s</span> | 칼퇴: <span>속도 +${cfg.earlyLeaveSpeedBonus}</span> | 야근: <span>점프 ${cfg.overtimeMaxJumps}회</span>`;
+}
+
+function drawAbil(){
+  const abs=[
+    {n:'⏱ 시간연장',bk:'timeBonusPerLv',mk:'maxTimeLv',ck:'timeCost',col:'#60a5fa',u:'s'},
+    {n:'💥 스턴감소',bk:'stunReducePerLv',mk:'maxStunLv',ck:'stunCost',col:'#f87171',u:'s'},
+    {n:'🚀 속도증가',bk:'speedBonusPerLv',mk:'maxSpeedLv',ck:'speedCost',col:'#4ade80',u:''},
+  ];
+  ctx.fillStyle='#0f0f1a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  abs.forEach((a,i)=>{
+    const y=40+i*65;
+    const maxL=cfg[a.mk], pw=canvas.width-110;
+    ctx.fillStyle='#1a1a3e'; ctx.fillRect(80,y+18,pw,16);
+    ctx.fillStyle=a.col; ctx.fillRect(80,y+18,pw,16);
+    for(let lv=1;lv<=maxL;lv++){
+      const x=80+pw*lv/maxL;
+      ctx.fillStyle='#0f0f1a'; ctx.fillRect(x-1,y+16,2,20);
+    }
+    ctx.fillStyle='white'; ctx.font='bold 11px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(a.n,74,y+30);
+    ctx.fillStyle=a.col; ctx.textAlign='left'; ctx.font='9px monospace';
+    ctx.fillText(`최대 +${fmt(maxL*cfg[a.bk])}${a.u} (${maxL}레벨)`,84,y+14);
+    ctx.fillStyle='#888'; ctx.textAlign='right';
+    ctx.fillText(`${cfg[a.ck]}포인트/레벨`,canvas.width-6,y+14);
+  });
+}
+
+function drawXp(){
+  const maxL=25, W=canvas.width-60, H=canvas.height-55, OX=45, OY=10;
+  ctx.fillStyle='#0f0f1a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  const maxXp=cfg.xpBase+maxL*cfg.xpPerLevel;
+  ctx.strokeStyle='#2a2a3e'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(OX,OY); ctx.lineTo(OX,OY+H); ctx.lineTo(OX+W,OY+H); ctx.stroke();
+  for(let i=1;i<=4;i++){
+    const y=OY+H-H*i/4;
+    ctx.strokeStyle='#1a1a3e'; ctx.beginPath(); ctx.moveTo(OX,y); ctx.lineTo(OX+W,y); ctx.stroke();
+    ctx.fillStyle='#606070'; ctx.font='9px monospace'; ctx.textAlign='right';
+    ctx.fillText(Math.round(maxXp*i/4),OX-4,y+4);
+  }
+  ctx.strokeStyle='#facc15'; ctx.lineWidth=2.5;
+  ctx.beginPath();
+  for(let lv=1;lv<=maxL;lv++){
+    const xp=cfg.xpBase+lv*cfg.xpPerLevel;
+    const x=OX+W*(lv-1)/(maxL-1);
+    const y=OY+H-H*(xp/maxXp);
+    lv===1?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    if([1,5,10,20,25].includes(lv)){
+      ctx.fillStyle='#facc15';
+      ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#ccc'; ctx.font='9px monospace'; ctx.textAlign='center';
+      ctx.fillText(`Lv${lv}:${xp}`,x,y-10);
+    }
+  }
+  ctx.stroke();
+  ctx.fillStyle='#606070'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('레벨',OX+W/2,OY+H+18);
+}
+
+function drawSpawn(dt){
+  S.time+=dt;
+  S.obsT-=dt; S.jellyT-=dt; S.coinT-=dt;
+  if(S.obsT<=0){
+    S.evs.push({t:S.time,type:'obs',x:canvas.width});
+    S.obsT=Math.max(cfg.obsMinInterval,cfg.obsBaseInterval)+(Math.random()-.5)*cfg.obsIntervalRandom;
+  }
+  if(S.jellyT<=0){
+    if(Math.random()<cfg.jellySpawnChance) S.evs.push({t:S.time,type:'jelly',x:canvas.width});
+    S.jellyT=cfg.jellyBaseInterval+Math.random()*cfg.jellyIntervalRandom;
+  }
+  if(S.coinT<=0){
+    S.evs.push({t:S.time,type:'coin',x:canvas.width});
+    S.coinT=cfg.coinMinInterval+Math.random()*(cfg.coinMaxInterval-cfg.coinMinInterval);
+  }
+  const spd=70;
+  S.evs=S.evs.map(e=>({...e,x:e.x-spd*dt})).filter(e=>e.x>-20);
+  drawGround();
+  S.evs.forEach(e=>{
+    if(e.type==='obs'){ctx.fillStyle='#9090c0';ctx.fillRect(e.x-10,GND-35,20,35);}
+    else if(e.type==='jelly'){ctx.fillStyle='#ff69b4';ctx.beginPath();ctx.arc(e.x,GND-60,10,0,Math.PI*2);ctx.fill();}
+    else{ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(e.x,GND-40,8,0,Math.PI*2);ctx.fill();}
+  });
+  [['#9090c0','장애물'],['#ff69b4','젤리'],['#facc15','코인']].forEach(([c,l],i)=>{
+    ctx.fillStyle=c; ctx.fillRect(10,12+i*18,12,12);
+    ctx.fillStyle='white'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(l,26,22+i*18);
+  });
+  document.getElementById('simInfo').innerHTML=
+    `장애물: <span>${fmt(cfg.obsBaseInterval)}s</span> | 젤리: <span>${(cfg.jellySpawnChance*100).toFixed(0)}%</span> | 코인: <span>${cfg.coinMinInterval}~${cfg.coinMaxInterval}s</span>`;
+}
+
+function drawEco(){
+  ctx.fillStyle='#0f0f1a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  const items=[
+    {l:'시작 코인',v:`${cfg.defaultStartCoins} 🪙`,c:'#facc15'},
+    {l:'닉네임 변경',v:`${cfg.nicknameChangeCost} 🪙`,c:'#f87171'},
+    {l:'술취한 아저씨',v:`${cfg.drunkUncleCost} 🪙`,c:'#f87171'},
+    {l:'칼퇴 아저씨',v:`${cfg.earlyLeaveCost} 🪙`,c:'#f87171'},
+    {l:'야근한 아저씨',v:`${cfg.overtimeCost} 🪙`,c:'#f87171'},
+  ];
+  items.forEach((it,i)=>{
+    const y=35+i*42;
+    ctx.fillStyle='#1a1a3e'; ctx.fillRect(18,y-16,canvas.width-36,32);
+    ctx.fillStyle='#a0a0b0'; ctx.font='12px sans-serif'; ctx.textAlign='left'; ctx.fillText(it.l,32,y+4);
+    ctx.fillStyle=it.c; ctx.textAlign='right'; ctx.fillText(it.v,canvas.width-32,y+4);
+  });
+}
+
+// ─────────────────────────────────────────────
+// SUBMIT / GITHUB
+// ─────────────────────────────────────────────
+function resetAll(){
+  cfg=deep(DEF); mod={};
+  updateCount(); buildCtrl(curTab);
+  toast('초기화 완료');
+}
+
+function submitChanges(){
+  if(!Object.keys(mod).length){toast('변경된 항목이 없습니다',true);return;}
+  openPw(`<b>${Object.keys(mod).length}개</b> 항목을 제출합니다.`,doSubmit);
+}
+
+async function doSubmit(){
+  const payload={submitter:visitor,timestamp:new Date().toISOString(),changes:mod,fullConfig:cfg};
+  const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
+  if(repo&&tok){ await postIssue(payload,repo,tok); }
+  else { showExport(payload); }
+}
+
+async function postIssue(payload,repo,tok){
+  const dt=new Date(payload.timestamp).toLocaleString('ko-KR');
+  const cList=Object.entries(payload.changes).map(([k,v])=>`- **${k}**: \`${JSON.stringify(DEF[k])}\` → \`${JSON.stringify(v)}\``).join('\n');
+  const body=`**제출자:** ${payload.submitter}\n**시간:** ${dt}\n\n## 변경 항목\n${cList}\n\n## 전체 설정\n\`\`\`json\n${JSON.stringify(payload.fullConfig,null,2)}\n\`\`\``;
+  try{
+    const r=await fetch(`https://api.github.com/repos/${repo}/issues`,{
+      method:'POST',
+      headers:{'Authorization':`token ${tok}`,'Content-Type':'application/json','User-Agent':'MakchaBalanceTool'},
+      body:JSON.stringify({title:`[Balance] ${payload.submitter} - ${dt}`,body,labels:['balance-request']})
+    });
+    if(r.ok){const d=await r.json();toast(`✅ 전송 완료! Issue #${d.number}`);mod={};updateCount();}
+    else toast('❌ GitHub 전송 실패 (토큰/저장소 확인)',true);
+  }catch{toast('❌ 네트워크 오류',true);}
+}
+
+function showExport(payload){
+  document.getElementById('exportText').value=JSON.stringify(payload,null,2);
+  document.getElementById('exportOverlay').style.display='flex';
+}
+function copyExport(){
+  navigator.clipboard.writeText(document.getElementById('exportText').value);
+  toast('클립보드에 복사됨');
+}
+
+// ─────────────────────────────────────────────
+// QUEUE
+// ─────────────────────────────────────────────
+function openQ(){ document.getElementById('qOverlay').style.display='flex'; fetchQueue(); }
+function closeQ(){ document.getElementById('qOverlay').style.display='none'; }
+
+async function fetchQueue(){
+  const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
+  const list=document.getElementById('qList');
+  if(!repo){list.innerHTML='<div style="color:var(--text2);padding:16px">먼저 ⚙️ GitHub 설정에서 저장소를 입력하세요.</div>';return;}
+  list.innerHTML='<div style="color:var(--text2)">불러오는 중...</div>';
+  try{
+    const h={'User-Agent':'MakchaBalanceTool'};
+    if(tok) h['Authorization']=`token ${tok}`;
+    const r=await fetch(`https://api.github.com/repos/${repo}/issues?labels=balance-request&state=open&per_page=20`,{headers:h});
+    const issues=await r.json();
+    if(!Array.isArray(issues)||!issues.length){list.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">대기 중인 요청이 없습니다</div>';return;}
+    list.innerHTML='';
+    issues.forEach(iss=>{
+      const qi=document.createElement('div'); qi.className='qi';
+      const dt=new Date(iss.created_at).toLocaleString('ko-KR');
+      qi.innerHTML=`<h4>#${iss.number} ${iss.title}</h4><div class="meta">${dt}</div>
+        <div class="row">
+          <button class="btn btn-s" style="font-size:.75rem" onclick="window.open('${iss.html_url}','_blank')">GitHub에서 보기</button>
+          <button class="btn btn-g" style="font-size:.75rem" onclick="applyIssue(${iss.number},'${repo}','${tok||''}',this)">Unity에 적용</button>
+        </div>`;
+      list.appendChild(qi);
+    });
+  }catch{list.innerHTML='<div style="color:var(--accent)">로드 실패</div>';}
+}
+
+function applyIssue(num,repo,tok,btn){
+  openPw('적용하려면 비밀번호를 입력하세요.',()=>{
+    toast(`Issue #${num} — Unity Editor에서 "밸런스 수신" 메뉴를 실행하세요`);
+    btn.textContent='✓ 수신 대기 중'; btn.disabled=true;
+  });
+}
+
+// ─────────────────────────────────────────────
+// GITHUB SETTINGS
+// ─────────────────────────────────────────────
+function openGh(){document.getElementById('ghOverlay').style.display='flex';}
+function saveGh(){
+  localStorage.setItem('mk_repo',document.getElementById('ghRepo').value.trim());
+  localStorage.setItem('mk_tok',document.getElementById('ghToken').value.trim());
+  document.getElementById('ghOverlay').style.display='none';
+  toast('GitHub 설정 저장됨');
+}
+
+// ─────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────
+function toast(msg,err=false){
+  const t=document.createElement('div'); t.className='toast';
+  t.style.borderColor=err?'var(--accent)':'var(--green)'; t.textContent=msg;
+  document.body.appendChild(t); setTimeout(()=>t.remove(),3200);
+}
+</script>
+</body>
+</html>
