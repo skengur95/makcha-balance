@@ -106,7 +106,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:9px 
 </div>
 
 <!-- Password -->
-<div class="overlay" id="pwOverlay" style="display:none">
+<div class="overlay" id="pwOverlay" style="display:none;z-index:980">
 <div class="modal">
   <h2>🔒 관리자 확인</h2>
   <p id="pwDesc">변경사항을 제출하려면 비밀번호를 입력하세요.<br>
@@ -123,7 +123,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:9px 
 <!-- Queue -->
 <div class="overlay" id="qOverlay" style="display:none">
 <div class="modal" style="max-width:680px;max-height:82vh;overflow-y:auto">
-  <h2 style="margin-bottom:14px">📋 대기 중인 변경 요청</h2>
+  <h2 style="margin-bottom:8px">📋 대기 중인 변경 요청</h2>
+  <p style="color:var(--text2);font-size:.8rem;margin-bottom:12px">승인 / 거절은 Unity 에디터에서만 처리할 수 있습니다.</p>
   <div id="qList"><div style="color:var(--text2);text-align:center;padding:20px">불러오는 중...</div></div>
   <div class="row" style="margin-top:14px">
     <button class="btn btn-s" onclick="fetchQueue()">새로고침</button>
@@ -1018,45 +1019,12 @@ async function fetchQueue(){
       const row=document.createElement('div'); row.className='row';
       const bGh=document.createElement('button'); bGh.className='btn btn-s'; bGh.style.fontSize='.75rem';
       bGh.textContent='GitHub에서 보기'; bGh.onclick=()=>window.open(iss.html_url,'_blank');
-      const bOk=document.createElement('button'); bOk.className='btn btn-p'; bOk.style.fontSize='.75rem';
-      bOk.textContent='✅ 승인'; bOk.onclick=()=>approveIssue(iss);
-      const bNo=document.createElement('button'); bNo.className='btn btn-g'; bNo.style.fontSize='.75rem';
-      bNo.textContent='❌ 거절'; bNo.onclick=()=>rejectIssue(iss);
-      row.appendChild(bGh); row.appendChild(bOk); row.appendChild(bNo);
+      row.appendChild(bGh);
       qi.appendChild(row); list.appendChild(qi);
     });
   }catch(e){list.innerHTML=`<div style="color:var(--accent)">로드 실패: ${e.message}</div>`;}
 }
 
-function approveIssue(iss){
-  openPw('승인하시겠습니까? 비밀번호를 입력하세요.',async()=>{
-    const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
-    if(!repo||!tok){toast('GitHub 설정이 필요합니다.',true);return;}
-    const newCfg=parseConfigFromBody(iss.body||'');
-    if(!newCfg){toast('설정 JSON을 파싱할 수 없습니다.',true);return;}
-    const ok=await updateGhConfig(newCfg,iss.number,repo,tok);
-    if(!ok){toast('GitHub 업데이트 실패',true);return;}
-    await closeGhIssue(iss.number,repo,tok,'✅ 승인됨 — 기본값 적용');
-    // 로컬 기본값 업데이트
-    Object.keys(newCfg).forEach(k=>{
-      if(k==='stageTimers'&&Array.isArray(newCfg[k])){ DEF.stageTimers=[...newCfg[k]]; cfg.stageTimers=[...newCfg[k]]; }
-      else if(k in DEF){ DEF[k]=newCfg[k]; cfg[k]=newCfg[k]; }
-    });
-    mod={}; updateCount(); buildCtrl(curTab);
-    toast('✅ 승인 완료 — 기본값이 업데이트되었습니다');
-    fetchQueue();
-  });
-}
-
-function rejectIssue(iss){
-  openPw('거절하시겠습니까? 비밀번호를 입력하세요.',async()=>{
-    const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
-    if(!repo||!tok){toast('GitHub 설정이 필요합니다.',true);return;}
-    await closeGhIssue(iss.number,repo,tok,'❌ 거절됨');
-    toast('거절 처리 완료');
-    fetchQueue();
-  });
-}
 
 // ─────────────────────────────────────────────
 // GITHUB SETTINGS
