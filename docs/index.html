@@ -252,7 +252,7 @@ function doEnter(){
   // load GitHub settings
   document.getElementById('ghRepo').value = localStorage.getItem('mk_repo')||'';
   document.getElementById('ghToken').value = localStorage.getItem('mk_tok')||'';
-  loadApprovedConfig().then(()=>initTabs());
+  loadApprovedConfig().then(()=>{ initTabs(); checkQueueOnLoad(); });
   requestAnimationFrame(loop);
 }
 
@@ -989,18 +989,26 @@ async function closeGhIssue(issNum,repo,tok,comment){
 function openQ(){ document.getElementById('qOverlay').style.display='flex'; fetchQueue(); }
 function closeQ(){ document.getElementById('qOverlay').style.display='none'; }
 
-async function fetchQueue(){
+async function ghFetchIssues(){
   const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
+  if(!repo) return null;
+  const h={'User-Agent':'MakchaBalanceTool'};
+  if(tok) h['Authorization']=`token ${tok}`;
+  const r=await fetch(`https://api.github.com/repos/${repo}/issues?state=open&per_page=50`,{headers:h});
+  if(!r.ok) throw new Error(`GitHub API ${r.status}: ${r.statusText}`);
+  const data=await r.json();
+  if(!Array.isArray(data)) throw new Error(data.message||'응답 오류');
+  return data.filter(i=>i.title&&i.title.startsWith('[Balance]'));
+}
+
+async function fetchQueue(){
   const list=document.getElementById('qList');
+  const repo=localStorage.getItem('mk_repo');
   if(!repo){list.innerHTML='<div style="color:var(--text2);padding:16px">먼저 ⚙️ GitHub 설정에서 저장소를 입력하세요.</div>';return;}
   list.innerHTML='<div style="color:var(--text2)">불러오는 중...</div>';
   try{
-    const h={'User-Agent':'MakchaBalanceTool'};
-    if(tok) h['Authorization']=`token ${tok}`;
-    const r=await fetch(`https://api.github.com/repos/${repo}/issues?state=open&per_page=30`,{headers:h});
-    const issues=await r.json();
-    const balIssues=Array.isArray(issues)?issues.filter(i=>i.title&&i.title.startsWith('[Balance]')):[];
-    if(!balIssues.length){list.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">대기 중인 요청이 없습니다</div>';return;}
+    const balIssues=await ghFetchIssues();
+    if(!balIssues||!balIssues.length){list.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">대기 중인 요청이 없습니다</div>';return;}
     list.innerHTML='';
     balIssues.forEach(iss=>{
       const qi=document.createElement('div'); qi.className='qi';
@@ -1059,6 +1067,40 @@ function saveGh(){
   localStorage.setItem('mk_tok',document.getElementById('ghToken').value.trim());
   document.getElementById('ghOverlay').style.display='none';
   toast('GitHub 설정 저장됨');
+}
+
+// ─────────────────────────────────────────────
+// QUEUE AUTO-CHECK
+// ─────────────────────────────────────────────
+let _notif=null;
+function showNotif(msg, warn=false){
+  if(_notif) _notif.remove();
+  const n=document.createElement('div');
+  n.style.cssText=`position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:var(--surface);border:2px solid ${warn?'var(--yellow)':'var(--border)'};
+    border-radius:14px;padding:22px 32px;z-index:950;font-size:.95rem;text-align:center;
+    box-shadow:0 16px 48px rgba(0,0,0,.7);min-width:260px;animation:fadeIn .2s;
+    color:${warn?'var(--yellow)':'var(--text)'};cursor:pointer;white-space:pre-line`;
+  n.textContent=msg;
+  n.onclick=()=>n.remove();
+  document.body.appendChild(n);
+  _notif=n;
+  return n;
+}
+
+async function checkQueueOnLoad(){
+  if(!localStorage.getItem('mk_repo')) return;
+  const n=showNotif('미확인 대기열 확인중입니다...');
+  try{
+    const bal=await ghFetchIssues();
+    if(bal&&bal.length>0){
+      n.style.borderColor='var(--yellow)'; n.style.color='var(--yellow)';
+      n.textContent='미확인 대기열이 있습니다!\n수정하기전 확인해주세요!';
+    } else {
+      n.textContent='미확인 대기열이 없습니다!';
+      setTimeout(()=>n.remove(),2500);
+    }
+  }catch{ n.remove(); }
 }
 
 // ─────────────────────────────────────────────
