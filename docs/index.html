@@ -252,7 +252,7 @@ function doEnter(){
   // load GitHub settings
   document.getElementById('ghRepo').value = localStorage.getItem('mk_repo')||'';
   document.getElementById('ghToken').value = localStorage.getItem('mk_tok')||'';
-  initTabs();
+  loadApprovedConfig().then(()=>initTabs());
   requestAnimationFrame(loop);
 }
 
@@ -272,7 +272,7 @@ async function doPw(){
   const v = document.getElementById('pwInput').value;
   if(!v) return;
   const ok = await checkPw(v);
-  if(ok){ closePw(); pwCb?.(); }
+  if(ok){ const cb=pwCb; closePw(); cb?.(); }
   else { closePw(); toast('비밀번호가 맞지 않습니다.',true); }
 }
 
@@ -331,9 +331,13 @@ function mkSlider(lbl,key,mn,mx,step,isInt){
   vl.textContent=isInt?Math.round(cfg[key]):fmt(cfg[key]);
   const apply=()=>{
     const v=isInt?parseInt(inp.value):parseFloat(inp.value);
-    cfg[key]=v; mod[key]=v;
+    cfg[key]=v;
+    if(typeof DEF[key]==='number'&&Math.abs(v-DEF[key])<0.0001){
+      delete mod[key]; inp.classList.remove('mod');
+    } else {
+      mod[key]=v; inp.classList.add('mod');
+    }
     vl.textContent=isInt?v:fmt(v);
-    inp.classList.add('mod');
     updateCount(); onCfgChange();
   };
   inp.oninput=apply;
@@ -906,7 +910,7 @@ async function postIssue(payload,repo,tok){
     const r=await fetch(`https://api.github.com/repos/${repo}/issues`,{
       method:'POST',
       headers:{'Authorization':`token ${tok}`,'Content-Type':'application/json','User-Agent':'MakchaBalanceTool'},
-      body:JSON.stringify({title:`[Balance] ${payload.submitter} - ${dt}`,body,labels:['balance-request']})
+      body:JSON.stringify({title:`[Balance] ${payload.submitter} - ${dt}`,body})
     });
     if(r.ok){const d=await r.json();toast('대기열에 추가 되었습니다');mod={};updateCount();buildCtrl(curTab);}
     else toast('❌ GitHub 전송 실패 (토큰/저장소 확인)',true);
@@ -923,6 +927,63 @@ function copyExport(){
 }
 
 // ─────────────────────────────────────────────
+// APPROVED CONFIG (GitHub에서 기본값 로드)
+// ─────────────────────────────────────────────
+async function loadApprovedConfig(){
+  const repo=localStorage.getItem('mk_repo');
+  if(!repo) return;
+  try{
+    const r=await fetch(`https://raw.githubusercontent.com/${repo}/main/balance-config.json?t=${Date.now()}`);
+    if(!r.ok) return;
+    const saved=await r.json();
+    Object.keys(saved).forEach(k=>{
+      if(k==='stageTimers'&&Array.isArray(saved[k])){ DEF.stageTimers=[...saved[k]]; cfg.stageTimers=[...saved[k]]; }
+      else if(k in DEF){ DEF[k]=saved[k]; cfg[k]=saved[k]; }
+    });
+  }catch{}
+}
+
+function parseConfigFromBody(body){
+  const s=body.indexOf('```json\n');
+  const e=s>=0?body.indexOf('\n```',s+7):-1;
+  if(s<0||e<0) return null;
+  try{ return JSON.parse(body.substring(s+7,e)); }catch{ return null; }
+}
+
+async function updateGhConfig(newCfg,issNum,repo,tok){
+  let sha=null;
+  try{
+    const r=await fetch(`https://api.github.com/repos/${repo}/contents/balance-config.json`,
+      {headers:{'Authorization':`token ${tok}`,'User-Agent':'MakchaBalanceTool'}});
+    if(r.ok){ const d=await r.json(); sha=d.sha; }
+  }catch{}
+  const content=btoa(unescape(encodeURIComponent(JSON.stringify(newCfg,null,2))));
+  const bd={message:`Apply balance: #${issNum}`,content};
+  if(sha) bd.sha=sha;
+  const r2=await fetch(`https://api.github.com/repos/${repo}/contents/balance-config.json`,{
+    method:'PUT',
+    headers:{'Authorization':`token ${tok}`,'Content-Type':'application/json','User-Agent':'MakchaBalanceTool'},
+    body:JSON.stringify(bd)
+  });
+  return r2.ok;
+}
+
+async function closeGhIssue(issNum,repo,tok,comment){
+  if(comment){
+    await fetch(`https://api.github.com/repos/${repo}/issues/${issNum}/comments`,{
+      method:'POST',
+      headers:{'Authorization':`token ${tok}`,'Content-Type':'application/json','User-Agent':'MakchaBalanceTool'},
+      body:JSON.stringify({body:comment})
+    });
+  }
+  await fetch(`https://api.github.com/repos/${repo}/issues/${issNum}`,{
+    method:'PATCH',
+    headers:{'Authorization':`token ${tok}`,'Content-Type':'application/json','User-Agent':'MakchaBalanceTool'},
+    body:JSON.stringify({state:'closed'})
+  });
+}
+
+// ─────────────────────────────────────────────
 // QUEUE
 // ─────────────────────────────────────────────
 function openQ(){ document.getElementById('qOverlay').style.display='flex'; fetchQueue(); }
@@ -936,27 +997,56 @@ async function fetchQueue(){
   try{
     const h={'User-Agent':'MakchaBalanceTool'};
     if(tok) h['Authorization']=`token ${tok}`;
-    const r=await fetch(`https://api.github.com/repos/${repo}/issues?labels=balance-request&state=open&per_page=20`,{headers:h});
+    const r=await fetch(`https://api.github.com/repos/${repo}/issues?state=open&per_page=30`,{headers:h});
     const issues=await r.json();
-    if(!Array.isArray(issues)||!issues.length){list.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">대기 중인 요청이 없습니다</div>';return;}
+    const balIssues=Array.isArray(issues)?issues.filter(i=>i.title&&i.title.startsWith('[Balance]')):[];
+    if(!balIssues.length){list.innerHTML='<div style="color:var(--text2);text-align:center;padding:20px">대기 중인 요청이 없습니다</div>';return;}
     list.innerHTML='';
-    issues.forEach(iss=>{
+    balIssues.forEach(iss=>{
       const qi=document.createElement('div'); qi.className='qi';
       const dt=new Date(iss.created_at).toLocaleString('ko-KR');
-      qi.innerHTML=`<h4>#${iss.number} ${iss.title}</h4><div class="meta">${dt}</div>
-        <div class="row">
-          <button class="btn btn-s" style="font-size:.75rem" onclick="window.open('${iss.html_url}','_blank')">GitHub에서 보기</button>
-          <button class="btn btn-g" style="font-size:.75rem" onclick="applyIssue(${iss.number},'${repo}','${tok||''}',this)">Unity에 적용</button>
-        </div>`;
-      list.appendChild(qi);
+      const h4=document.createElement('h4'); h4.textContent=`#${iss.number} ${iss.title}`; qi.appendChild(h4);
+      const meta=document.createElement('div'); meta.className='meta'; meta.textContent=dt; qi.appendChild(meta);
+      const row=document.createElement('div'); row.className='row';
+      const bGh=document.createElement('button'); bGh.className='btn btn-s'; bGh.style.fontSize='.75rem';
+      bGh.textContent='GitHub에서 보기'; bGh.onclick=()=>window.open(iss.html_url,'_blank');
+      const bOk=document.createElement('button'); bOk.className='btn btn-p'; bOk.style.fontSize='.75rem';
+      bOk.textContent='✅ 승인'; bOk.onclick=()=>approveIssue(iss);
+      const bNo=document.createElement('button'); bNo.className='btn btn-g'; bNo.style.fontSize='.75rem';
+      bNo.textContent='❌ 거절'; bNo.onclick=()=>rejectIssue(iss);
+      row.appendChild(bGh); row.appendChild(bOk); row.appendChild(bNo);
+      qi.appendChild(row); list.appendChild(qi);
     });
-  }catch{list.innerHTML='<div style="color:var(--accent)">로드 실패</div>';}
+  }catch(e){list.innerHTML=`<div style="color:var(--accent)">로드 실패: ${e.message}</div>`;}
 }
 
-function applyIssue(num,repo,tok,btn){
-  openPw('적용하려면 비밀번호를 입력하세요.',()=>{
-    toast(`Issue #${num} — Unity Editor에서 "밸런스 수신" 메뉴를 실행하세요`);
-    btn.textContent='✓ 수신 대기 중'; btn.disabled=true;
+function approveIssue(iss){
+  openPw('승인하시겠습니까? 비밀번호를 입력하세요.',async()=>{
+    const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
+    if(!repo||!tok){toast('GitHub 설정이 필요합니다.',true);return;}
+    const newCfg=parseConfigFromBody(iss.body||'');
+    if(!newCfg){toast('설정 JSON을 파싱할 수 없습니다.',true);return;}
+    const ok=await updateGhConfig(newCfg,iss.number,repo,tok);
+    if(!ok){toast('GitHub 업데이트 실패',true);return;}
+    await closeGhIssue(iss.number,repo,tok,'✅ 승인됨 — 기본값 적용');
+    // 로컬 기본값 업데이트
+    Object.keys(newCfg).forEach(k=>{
+      if(k==='stageTimers'&&Array.isArray(newCfg[k])){ DEF.stageTimers=[...newCfg[k]]; cfg.stageTimers=[...newCfg[k]]; }
+      else if(k in DEF){ DEF[k]=newCfg[k]; cfg[k]=newCfg[k]; }
+    });
+    mod={}; updateCount(); buildCtrl(curTab);
+    toast('✅ 승인 완료 — 기본값이 업데이트되었습니다');
+    fetchQueue();
+  });
+}
+
+function rejectIssue(iss){
+  openPw('거절하시겠습니까? 비밀번호를 입력하세요.',async()=>{
+    const repo=localStorage.getItem('mk_repo'), tok=localStorage.getItem('mk_tok');
+    if(!repo||!tok){toast('GitHub 설정이 필요합니다.',true);return;}
+    await closeGhIssue(iss.number,repo,tok,'❌ 거절됨');
+    toast('거절 처리 완료');
+    fetchQueue();
   });
 }
 
