@@ -233,9 +233,8 @@ async function sha256(s){
   return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
 }
 async function checkPw(pw){
-  const stored = localStorage.getItem('mk_pw');
-  if(!stored){ localStorage.setItem('mk_pw', await sha256(pw)); return true; }
-  return (await sha256(pw)) === stored;
+  const HASH = '4844d9cfb51d61eb085f4fbd821c17d4711b5182e4ac523f3308f5b1cee28bcb';
+  return (await sha256(pw)) === HASH;
 }
 
 // ─────────────────────────────────────────────
@@ -1031,6 +1030,9 @@ async function fetchQueue(){
 // ─────────────────────────────────────────────
 function openGh(){document.getElementById('ghOverlay').style.display='flex';}
 function saveGh(){
+  openPw('GitHub 설정을 변경하려면 비밀번호를 입력하세요.', doSaveGh);
+}
+function doSaveGh(){
   localStorage.setItem('mk_repo',document.getElementById('ghRepo').value.trim());
   localStorage.setItem('mk_tok',document.getElementById('ghToken').value.trim());
   document.getElementById('ghOverlay').style.display='none';
